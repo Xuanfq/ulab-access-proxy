@@ -1,0 +1,126 @@
+#!/bin/bash
+
+function printUsage() {
+	echo "Usage: $0 <version>"
+    echo ""
+	echo "  <version> is the version of nginx "
+    echo "  you want to compile, should be >= 1.10.3, e.g: 1.26.1"
+	echo ""
+    echo "<version> include:"
+	curl -s https://nginx.org/en/download.html | 
+        grep -o "nginx-[1-9]\+.[1-9][0-9]\+.[0-9]\+.tar.gz\"" | 
+        grep -o "nginx-[1-9]\+.[1-9][0-9]\+.[0-9]\+" | 
+        sed 's/nginx-/      /'
+	echo ""
+}
+
+if [ ! "$1" ]; then
+	printUsage
+	exit 1
+fi
+
+NGINX_VERSION="nginx-$1"
+BASE_PATH=$(cd "$(dirname "$0")"; pwd)
+BUILD_PATH="$BASE_PATH/build"
+TARGET_PATH="$BASE_PATH/target"
+TARGET_PACKAGE=$NGINX_VERSION-image
+TARGET_PACKAGE_PATH=$TARGET_PATH/$TARGET_PACKAGE
+
+echo "$NGINX_VERSION will be compiled to $TARGET_PATH"
+
+rm -rf $BUILD_PATH && mkdir -p $BUILD_PATH
+rm -rf $TARGET_PATH && mkdir -p $TARGET_PATH
+
+
+cd $BUILD_PATH
+
+# Download nginx source code
+if [ ! -f $NGINX_VERSION.tar.gz ]; then
+    URL="https://nginx.org/download/$NGINX_VERSION.tar.gz"
+	echo "Downloading nginx source code: $URL"
+	echo ""
+	if hash curl 2>/dev/null; then
+		(curl "$URL" --silent -o $NGINX_VERSION.tar.gz) > /dev/null
+	elif hash wget 2>/dev/null; then
+		(wget "$URL" --quiet -O $NGINX_VERSION.tar.gz) > /dev/null
+    else
+		echo "curl and wget not found, please install one of them."
+		exit 1
+	fi
+else
+	echo "Nginx source code already downloaded."
+fi
+
+# Extract nginx source code
+echo "Extracting file."
+tar xf ./$NGINX_VERSION.tar.gz
+
+# Configure
+echo "Configuring executable."
+
+cd ./$NGINX_VERSION
+./configure \
+    --prefix=. \
+    --sbin-path=sbin/ \
+    --conf-path=conf/nginx.conf \
+    --error-log-path=logs/error.log \
+    --http-log-path=logs/access.log \
+    --http-client-body-temp-path=tmp/client_body_temp/ \
+    --http-proxy-temp-path=tmp/proxy_temp/ \
+    --http-fastcgi-temp-path=tmp/fastcgi_temp/ \
+    --http-uwsgi-temp-path=tmp/uwsgi_temp/ \
+    --http-scgi-temp-path=tmp/scgi_temp/ \
+    --with-http_ssl_module \
+    --with-http_gzip_static_module \
+    --with-http_stub_status_module \
+    --with-http_v2_module \
+    --with-http_sub_module \
+    --with-http_dav_module \
+    --with-http_flv_module \
+    --with-http_mp4_module \
+    --with-http_realip_module \
+    --with-ipv6 \
+    --with-file-aio \
+    --with-stream \
+    --with-stream_realip_module \
+    --with-stream_ssl_module \
+    --with-stream_ssl_preread_module
+
+# Build
+echo "Building executable."
+make
+
+# Pack
+echo "Packing target."
+mkdir -p $TARGET_PACKAGE_PATH
+mkdir -p $TARGET_PACKAGE_PATH/logs
+mkdir -p $TARGET_PACKAGE_PATH/tmp
+mkdir -p $TARGET_PACKAGE_PATH/sbin
+mkdir -p $TARGET_PACKAGE_PATH/conf
+mkdir -p $TARGET_PACKAGE_PATH/html
+
+cp -f objs/nginx $TARGET_PACKAGE_PATH/sbin/
+cp -r conf/* $TARGET_PACKAGE_PATH/conf
+cp -r html/* $TARGET_PACKAGE_PATH/html
+
+echo "$NGINX_VERSION" > $TARGET_PACKAGE_PATH/version
+
+cd $TARGET_PACKAGE_PATH
+ln -s ./sbin/nginx nginx
+
+cd $TARGET_PATH
+tar czf "$TARGET_PACKAGE".tar.gz $TARGET_PACKAGE
+
+echo "Target package: $TARGET_PATH/$TARGET_PACKAGE"
+echo "Target package: $TARGET_PATH/$TARGET_PACKAGE.tar.gz"
+
+echo ""
+echo "Current Path: $BASE_PATH"
+read -r -p "Overwrite existing nginx of the current path? (y/n) " overwrite
+if [ "$overwrite" = "y" ]; then
+    cp -r $TARGET_PATH/$TARGET_PACKAGE/* $BASE_PATH
+    echo "Overwritten."
+    echo ""
+fi
+
+echo "Done."
