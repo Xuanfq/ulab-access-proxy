@@ -1,0 +1,62 @@
+#!/bin/bash
+
+BASE_PATH=$(cd "$(dirname "$0")"; pwd)
+CONF_PATH=$BASE_PATH/conf
+NGINX_PATH=$BASE_PATH/nginx
+
+function setupNginxSystemService() {
+    echo "Setting up nginx system service..."
+    
+    NGINX_CONF_PATH=$CONF_PATH/nginx.conf
+    NGINX_RUN_WITH_ARGS="$NGINX_PATH/nginx -p $NGINX_PATH"
+
+    NGINX_SYSTEM_SERVICE_CONF_TEMPLATE=$CONF_PATH/ulab-access-proxy.service.template
+    NGINX_SYSTEM_SERVICE_CONF_FILE=$CONF_PATH/ulab-access-proxy.service
+    NGINX_SYSTEM_SERVICE_REAL_FILE=/etc/systemd/system/ulab-access-proxy.service
+
+    # generate system service to conf
+    cat $NGINX_SYSTEM_SERVICE_CONF_TEMPLATE | sed "s|\$NGINX_RUN_WITH_ARGS|$NGINX_RUN_WITH_ARGS|" > $NGINX_SYSTEM_SERVICE_CONF_FILE
+    # link system service to systemd
+    sudo ln -sf $NGINX_SYSTEM_SERVICE_CONF_FILE $NGINX_SYSTEM_SERVICE_REAL_FILE
+
+    sudo systemctl daemon-reload
+    sudo systemctl start ulab-access-proxy
+    
+    curl http://localhost/status
+
+    echo "Done."
+}
+
+function removeNginxSystemService() {
+    echo "Removing nginx system service..."
+    
+    NGINX_CONF_PATH=$CONF_PATH/nginx.conf
+    NGINX_RUN_WITH_ARGS="$NGINX_PATH/nginx -p $NGINX_PATH"
+
+    NGINX_SYSTEM_SERVICE_CONF_TEMPLATE=$CONF_PATH/ulab-access-proxy.service.template
+    NGINX_SYSTEM_SERVICE_CONF_FILE=$CONF_PATH/ulab-access-proxy.service
+    NGINX_SYSTEM_SERVICE_REAL_FILE=/etc/systemd/system/ulab-access-proxy.service
+
+    sudo systemctl stop ulab-access-proxy
+    sudo systemctl disable ulab-access-proxy
+
+    # remove the link of system service to systemd
+    sudo rm $NGINX_SYSTEM_SERVICE_REAL_FILE
+    # remove the system service to conf
+    rm $NGINX_SYSTEM_SERVICE_CONF_FILE
+
+    sudo systemctl daemon-reload
+    sudo systemctl status ulab-access-proxy
+
+    curl http://localhost/status
+
+    echo "Done."
+}
+
+if [ "$1" = "setup" ]; then
+    setupNginxSystemService
+elif [ "$1" = "remove" ]; then
+    removeNginxSystemService
+else
+    echo "Usage: $0 [setup|remove]"
+fi

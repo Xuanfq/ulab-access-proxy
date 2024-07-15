@@ -1,0 +1,21 @@
+[Unit]
+Description=ulab access proxy service
+Documentation=https://github.com/Xuanfq/ulab-access-proxy
+After=network.target
+
+[Service]
+Type=forking
+ExecStartPost=/bin/sleep 0.1
+ExecStartPre=$NGINX_RUN_WITH_ARGS -t
+ExecStart=$NGINX_RUN_WITH_ARGS
+ExecReload=$NGINX_RUN_WITH_ARGS -s reload
+ExecStop=$NGINX_RUN_WITH_ARGS -s stop
+ExecQuit=$NGINX_RUN_WITH_ARGS -s quit
+TimeoutStartSec=120
+PrivateTmp=true
+LimitNOFILE=1024000
+LimitNPROC=1024000
+LimitCORE=1024000
+
+[Install]
+WantedBy=multi-user.target
