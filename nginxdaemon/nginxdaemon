@@ -1,0 +1,17 @@
+#!/bin/bash
+
+BASE_PATH=$(cd "$(dirname "$0")"; pwd)
+
+if [ -n "$1" ] && [ -n "$2" ]
+then
+    echo "$1 $2" > "$BASE_PATH/logs/cmd"
+elif [ -z "$1"]
+then
+    sudo "$BASE_PATH/__init__.py"
+else
+    echo "Usage: $0 [<command> <args>] "
+    echo "  Run  daemon: $0"
+    echo "  Send signal: $0 <command> <args>"
+    echo "    - nginx  signal:  $0 [-s start|stop|restart|reload|reopen|quit]"
+    echo "    - daemon signal:  $0 [-m start|stop|quit]"
+fi
