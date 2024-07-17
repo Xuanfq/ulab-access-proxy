@@ -10,6 +10,7 @@ import signal
 import argparse
 
 
+
 BASE_PATH = Path(__file__).resolve().parent
 
 logger = logging.getLogger(__name__)
@@ -253,7 +254,7 @@ class NginxMonitorDaemon:
         signal.signal(signal.SIGINT, self._handle_signal)  # ctrl+c
         # start the daemon
         self.daemon = True
-        self.check_command_thread = Thread(target=self.check_command)
+        self.check_command_thread = Thread(target=self.daemon_cmd_monitor)
         self.check_command_thread.start()
         logger.info("Nginx monitor command daemon started...")
 
@@ -278,7 +279,7 @@ class NginxMonitorDaemon:
         """
         logger.info("Starting nginx monitor...")
         self.running = True
-        self.check_alive_thread = Thread(target=self.check_alive)
+        self.check_alive_thread = Thread(target=self.nginx_status_monitor)
         self.check_alive_thread.start()
         logger.info("Nginx monitor started...")
 
@@ -297,7 +298,7 @@ class NginxMonitorDaemon:
         self.running = False
         self.daemon = False
 
-    def check_alive(self):
+    def nginx_status_monitor(self):
         while self.running:
             self.nginx.status()
             if not self.nginx.nginx_alive:
@@ -308,7 +309,7 @@ class NginxMonitorDaemon:
             time.sleep(self.check_alive_interval)
         logger.info("Nginx monitor stopped...")
 
-    def check_command(self):
+    def daemon_cmd_monitor(self):
         parser = argparse.ArgumentParser("")
         parser.add_argument(
             "-n",
