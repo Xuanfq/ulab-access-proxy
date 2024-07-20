@@ -163,6 +163,8 @@ def test_nacosclient_():
 
 def test_nacosclient():
     # test config
+    logger.info("Tests starting...")
+    logger.info("Testing config...")
     test_nacosclient_config_publish(content="test1")
     test_nacosclient_config_get()
     test_nacosclient_config_publish(content="test2")
@@ -173,6 +175,7 @@ def test_nacosclient():
     test_nacosclient_config_history_get_details()
     test_nacosclient_config_history_get_previous()
     # test instance
+    logger.info("Testing instance...")
     test_nacosclient_instance_register()
     test_nacosclient_instance_deregister()
     test_nacosclient_instance_register()
