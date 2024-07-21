@@ -22,21 +22,36 @@ class NacosClient:
         self.login_timestamp = 0  # seconds
         self.login()
 
-    def _request(self, method, url, ret_type: str = "json", **kwargs):
+    def _request(self, method, uri, ret_type: str = "json", **kwargs):
+        # check params
+        if "params" not in kwargs:
+            kwargs["params"] = {}
+        # add access token
         if self.access_token is not None:
             kwargs["params"]["accessToken"] = self.access_token
-        logger.debug(f"Requesting {method} {url} with params {kwargs}")
-        response = requests.request(method, f"{self.base_url}/{url}", **kwargs)
+        # check bool params
+        kwargs["params"] = {
+            k: (str(v).lower() if isinstance(v, bool) else v)
+            for k, v in kwargs["params"].items()
+        }
+        logger.debug(f"Requesting {method} {uri} with params {kwargs}")
+        # do request
+        response = requests.request(
+            method=method, url=f"{self.base_url}/{uri}", **kwargs
+        )
+        # get request status code
         if response.status_code != 200:
             msg = f"Request failed with status code [{response.status_code}] and response: [{response.text}]"
             logger.error(msg)
+            # check access token timeout
             if self.login_timestamp + self.access_token_ttl <= int(time.time()):
                 logger.warning("Access token expired, retrying login...")
                 success, data = self.login()
                 if success:
-                    return self._request(method, url, **kwargs)
+                    return self._request(method, uri, **kwargs)
             return False, msg
         logger.debug(response)
+        # parse response
         if ret_type == "json":
             data = response.json()
         elif ret_type == "text":
@@ -173,7 +188,9 @@ class NacosClient:
             params["type"] = type
         if tenant is not None:
             params["tenant"] = tenant
-        success, data = self._request(method, uri, params=params)
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "true"
         logger.debug(f"Publish config result: {success}, data: {data}")
         return success, data
 
@@ -193,7 +210,9 @@ class NacosClient:
         params = {"dataId": data_id, "group": group}
         if tenant is not None:
             params["tenant"] = tenant
-        success, data = self._request(method, uri, params=params)
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "true"
         logger.debug(f"Delete config result: {success}, data: {data}")
         return success, data
 
@@ -336,7 +355,7 @@ class NacosClient:
         healthy: bool = None,
         ephemeral: bool = None,
         weight: float = None,
-        metadata: str = None,
+        metadata: dict = None,
         group_name: str = None,
         cluster_name: str = None,
         namespace_id: str = None,
@@ -351,7 +370,7 @@ class NacosClient:
             healthy (bool, optional): instance healthy. Defaults to None.
             ephemeral (bool, optional): instance ephemeral. Defaults to None.
             weight (float, optional): instance weight. Defaults to None.
-            metadata (str, optional): instance metadata. Defaults to None.
+            metadata (dict, optional): instance metadata. Defaults to None.
             group_name (str, optional): instance group name. Defaults to None.
             cluster_name (str, optional): instance cluster name. Defaults to None.
             namespace_id (str, optional): instance namespace id. Defaults to None.
@@ -368,13 +387,14 @@ class NacosClient:
             "healthy": healthy,
             "ephemeral": ephemeral,
             "weight": weight,
-            "metadata": metadata,
+            "metadata": json.dumps(metadata),
             "clusterName": cluster_name,
             "groupName": group_name,
             "namespaceId": namespace_id,
         }
         success, data = self._request(method, uri, ret_type="text", params=params)
-        data = data == "ok"
+        if success:
+            data = data == "ok"
         logger.debug(f"Register instance result: {success}, data: {data}")
         return success, data
 
@@ -413,7 +433,8 @@ class NacosClient:
             "namespaceId": namespace_id,
         }
         success, data = self._request(method, uri, ret_type="text", params=params)
-        data = data == "ok"
+        if success:
+            data = data == "ok"
         logger.debug(f"Deregister instance result: {success}, data: {data}")
         return success, data
 
@@ -425,7 +446,7 @@ class NacosClient:
         enabled: bool = None,
         ephemeral: bool = None,
         weight: float = None,
-        metadata: str = None,
+        metadata: dict = None,
         group_name: str = None,
         cluster_name: str = None,
         namespace_id: str = None,
@@ -439,7 +460,7 @@ class NacosClient:
             enabled (bool, optional): instance enabled. Defaults to None.
             ephemeral (bool, optional): instance ephemeral. Defaults to None.
             weight (float, optional): instance weight. Defaults to None.
-            metadata (str, optional): instance metadata. Defaults to None.
+            metadata (dict, optional): instance metadata. Defaults to None.
             group_name (str, optional): instance group name. Defaults to None.
             cluster_name (str, optional): instance cluster name. Defaults to None.
             namespace_id (str, optional): instance namespace id. Defaults to None.
@@ -455,13 +476,14 @@ class NacosClient:
             "enabled": enabled,
             "ephemeral": ephemeral,
             "weight": weight,
-            "metadata": metadata,
+            "metadata": json.dumps(metadata),
             "clusterName": cluster_name,
             "groupName": group_name,
             "namespaceId": namespace_id,
         }
         success, data = self._request(method, uri, ret_type="text", params=params)
-        data = data == "ok"
+        if success:
+            data = data == "ok"
         logger.debug(f"Instance modify result: {success}, data: {data}")
         return success, data
 
@@ -620,4 +642,466 @@ class NacosClient:
         }
         success, data = self._request(method, uri, ret_type="json", params=params)
         logger.debug(f"Instance beat result: {success}, data: {data}")
+        return success, data
+
+    def instance_update_healthy(
+        self,
+        service_name: str,
+        ip: str,
+        port: int,
+        healthy: bool,
+        group_name: str = None,
+        cluster_name: str = None,
+        namespace_id: str = None,
+    ):
+        """Update instance healthy status.
+        Health check of cluster should be turned off!!!
+
+        Args:
+            service_name (str): service name
+            ip (str): instance ip
+            port (int): instance port
+            healthy (bool): instance healthy status
+            group_name (str, optional): service group name. Defaults to None.
+            cluster_name (str, optional): service cluster name. Defaults to None.
+            namespace_id (str, optional): service namespace id. Defaults to None.
+
+        Returns: success, data: True and update result (bool, success or not) or False and msg
+        """
+        method = "PUT"
+        uri = "ns/health/instance"
+        params = {
+            "serviceName": service_name,
+            "ip": ip,
+            "port": port,
+            "healthy": healthy,
+            "groupName": group_name,
+            "clusterName": cluster_name,
+            "namespaceId": namespace_id,
+        }
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "ok"
+        logger.debug(f"Instance update healthy result: {success}, data: {data}")
+        return success, data
+
+    def service_create(
+        self,
+        service_name: str,
+        group_name: str = None,
+        namespace_id: str = None,
+        protect_threshold: float = 0,
+        metadata: dict = None,
+        selector: dict = None,
+    ):
+        """Create service
+
+        Args:
+            service_name (str): service name
+            group_name (str, optional): group name. Defaults to None.
+            namespace_id (str, optional): namespace id. Defaults to None.
+            protect_threshold (float, optional): protect threshold. Defaults to None.
+            metadata (dict, optional): metadata. Defaults to None.
+            selector (dict, optional): selector, access policy. Defaults to None.
+
+        Returns: success, data: True and create result(bool, success or not) or False and msg
+        """
+        method = "POST"
+        uri = "ns/service"
+        params = {
+            "serviceName": service_name,
+            "groupName": group_name,
+            "namespaceId": namespace_id,
+            "protectThreshold": protect_threshold,
+            "metadata": json.dumps(metadata),
+        }
+        if selector:
+            params["selector"] = json.dumps(selector)
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "ok"
+        logger.debug(f"Service create result: {success}, data: {data}")
+        return success, data
+
+    def service_delete(
+        self,
+        service_name: str,
+        group_name: str = None,
+        namespace_id: str = None,
+    ):
+        """Delete service
+
+        Args:
+            service_name (str): service name
+            group_name (str, optional): group name. Defaults to None.
+            namespace_id (str, optional): namespace id. Defaults to None.
+
+        Returns: success, data: True and create result(bool, success or not) or False and msg
+        """
+        method = "DELETE"
+        uri = "ns/service"
+        params = {
+            "serviceName": service_name,
+            "groupName": group_name,
+            "namespaceId": namespace_id,
+        }
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "ok"
+        logger.debug(f"Service delete result: {success}, data: {data}")
+        return success, data
+
+    def service_modify(
+        self,
+        service_name: str,
+        group_name: str = None,
+        namespace_id: str = None,
+        protect_threshold: float = 0,
+        metadata: dict = None,
+        selector: dict = None,
+    ):
+        """Modify service
+
+        Args:
+            service_name (str): service name
+            group_name (str, optional): group name. Defaults to None.
+            namespace_id (str, optional): namespace id. Defaults to None.
+            protect_threshold (float, optional): protect threshold. Defaults to None.
+            metadata (dict, optional): metadata. Defaults to None.
+            selector (dict, optional): selector, access policy. Defaults to None.
+
+        Returns: success, data: True and create result(bool, success or not) or False and msg
+        """
+        method = "PUT"
+        uri = "ns/service"
+        params = {
+            "serviceName": service_name,
+            "groupName": group_name,
+            "namespaceId": namespace_id,
+            "protectThreshold": protect_threshold,
+            "metadata": json.dumps(metadata),
+        }
+        if selector:
+            params["selector"] = json.dumps(selector)
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "ok"
+        logger.debug(f"Service modify result: {success}, data: {data}")
+        return success, data
+
+    def service_detail(
+        self,
+        service_name: str,
+        group_name: str = None,
+        namespace_id: str = None,
+    ):
+        """Query a service to get service detail
+
+        Args:
+            service_name (str): service name
+            group_name (str, optional): group name. Defaults to None.
+            namespace_id (str, optional): namespace id. Defaults to None.
+
+        Returns: success, data: True and service data or False and msg
+        Example:
+            data:{
+                metadata: {},
+                groupName: "DEFAULT_GROUP",
+                namespaceId: "public",
+                name: "nacos.test.2",
+                selector: {
+                    type: "none"
+                },
+                protectThreshold: 0,
+                clusters: [
+                    {
+                        healthChecker: {
+                            type: "TCP"
+                        },
+                        metadata: {},
+                        name: "c1"
+                    }
+                ]
+            }
+        """
+        method = "GET"
+        uri = "ns/service"
+        params = {
+            "serviceName": service_name,
+            "groupName": group_name,
+            "namespaceId": namespace_id,
+        }
+        success, data = self._request(method, uri, ret_type="json", params=params)
+        logger.debug(f"Service detail result: {success}, data: {data}")
+        return success, data
+
+    def service_list(
+        self,
+        page_no: int = 1,
+        page_size: int = 100,
+        group_name: str = None,
+        namespace_id: str = None,
+    ):
+        """Query services to get service list
+
+        Args:
+            page_no (int, optional): page number. Defaults to 1.
+            page_size (int, optional): page size. Defaults to 100.
+            group_name (str, optional): group name. Defaults to None.
+            namespace_id (str, optional): namespace id. Defaults to None.
+
+        Returns: success, data: True and service data or False and msg
+        Example:
+            data: {
+                "count": 3,
+                "doms": [
+                    "nacos.test.1",
+                    "nacos.test.2",
+                    "test"
+                ]
+            }
+        """
+        method = "GET"
+        uri = "ns/service/list"
+        params = {
+            "pageNo": page_no,
+            "pageSize": page_size,
+            "groupName": group_name,
+            "namespaceId": namespace_id,
+        }
+        success, data = self._request(method, uri, ret_type="json", params=params)
+        logger.debug(f"Service list result: {success}, data: {data}")
+        return success, data
+
+    def system_switches_get(
+        self,
+    ):
+        """Query system switches
+
+        Args:
+
+        Returns: success, data: True and system switches status data or False and msg
+        Example:
+            data: {
+                "name": "00-00---000-NACOS_SWITCH_DOMAIN-000---00-00",
+                "masters": None,
+                "adWeightMap": {},
+                "defaultPushCacheMillis": 10000,
+                "clientBeatInterval": 5000,
+                "defaultCacheMillis": 3000,
+                "distroThreshold": 0.7,
+                "healthCheckEnabled": True,
+                "autoChangeHealthCheckEnabled": True,
+                "distroEnabled": True,
+                "enableStandalone": True,
+                "pushEnabled": True,
+                "checkTimes": 3,
+                "httpHealthParams": {"max": 5000, "min": 500, "factor": 0.85},
+                "tcpHealthParams": {"max": 5000, "min": 1000, "factor": 0.75},
+                "mysqlHealthParams": {"max": 3000, "min": 2000, "factor": 0.65},
+                "incrementalList": [],
+                "serverStatusSynchronizationPeriodMillis": 2000,
+                "serviceStatusSynchronizationPeriodMillis": 5000,
+                "disableAddIP": False,
+                "sendBeatOnly": False,
+                "lightBeatEnabled": True,
+                "limitedUrlMap": {},
+                "distroServerExpiredMillis": 10000,
+                "pushGoVersion": "0.1.0",
+                "pushJavaVersion": "0.1.0",
+                "pushPythonVersion": "0.4.3",
+                "pushCVersion": "1.0.12",
+                "pushCSharpVersion": "0.9.0",
+                "enableAuthentication": False,
+                "overriddenServerStatus": None,
+                "defaultInstanceEphemeral": True,
+                "healthCheckWhiteList": [],
+                "checksum": None,
+            }
+        """
+        method = "GET"
+        uri = "ns/operator/switches"
+        success, data = self._request(method, uri, ret_type="json")
+        logger.debug(f"System switches result: {success}, data: {data}")
+        return success, data
+
+    def system_switches_modify(self, entry: str, value: str, debug: bool = False):
+        """Modify system switches
+
+        Args:
+            entry (str): switch name
+            value (str): switch value
+            debug (bool, optional): if True effective on local nacos else cluster. Defaults to False.
+
+        Returns: success, data: True and modify result (bool, success or not) or False and msg
+        Example: data: True
+        """
+        method = "PUT"
+        uri = "ns/operator/switches"
+        params = {"entry": entry, "value": value, "debug": debug}
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "ok"
+        logger.debug(f"System switches modify result: {success}, data: {data}")
+        return success, data
+
+    def system_metrics(self):
+        """Get system metrics
+
+        Args:
+
+        Returns: success, data: True and metrics data or False and msg
+        Example:
+            data: {
+                # serviceCount: 336,
+                # load: 0.09,
+                # mem: 0.46210432,
+                # responsibleServiceCount: 98,
+                # instanceCount: 4,
+                # cpu: 0.010242796,
+                status: "UP",
+                # responsibleInstanceCount: 0
+            }
+        """
+        method = "GET"
+        uri = "ns/operator/metrics"
+        success, data = self._request(method, uri, ret_type="json")
+        logger.debug(f"System metrics result: {success}, data: {data}")
+        return success, data
+
+    def cluster_list(self, health_only: bool = False):
+        """Get cluster server list. Nacos Not Implemented!!!
+
+        Args:
+            health_only (bool, optional): if True only return healthy cluster. Defaults to False.
+
+        Returns: success, data: True and cluster list or False and msg
+        Example:
+            data: [{
+                ip: "1.1.1.1",
+                servePort: 8848,
+                site: "unknown",
+                weight: 1,
+                adWeight: 0,
+                alive: false,
+                lastRefTime: 0,
+                lastRefTimeStr: null,
+                key: "1.1.1.1:8848"
+            }]
+        """
+        method = "GET"
+        uri = "ns/operator/servers"
+        params = {"healthy": health_only}
+        success, data = self._request(method, uri, ret_type="json", params=params)
+        logger.debug(f"Cluster list result: {success}, data: {data}")
+        return success, data
+
+    def cluster_leader(self):
+        """Get cluster server list. Nacos Not Implemented!!!
+
+        Args:
+
+        Returns: success, data: True and cluster list or False and msg
+        Example:
+            data: {
+                leader: "{"heartbeatDueMs":2500,"ip":"1.1.1.1:8848","leaderDueMs":12853,"state":"LEADER","term":54202,"voteFor":"1.1.1.1:8848"}"
+            }
+        """
+        method = "GET"
+        uri = "ns/raft/leader"
+        success, data = self._request(method, uri, ret_type="json")
+        logger.debug(f"Cluster leader result: {success}, data: {data}")
+        return success, data
+
+    def namespace_list(self):
+        """Get namespace list.
+
+        Returns: success, data: True and namespace list or False and msg
+        Example:
+            data: {
+                "code": 200,
+                "message": None,
+                "data": [
+                    {
+                        "namespace": "",
+                        "namespaceShowName": "public",
+                        "namespaceDesc": None,
+                        "quota": 200,
+                        "configCount": 1,
+                        "type": 0,
+                    }
+                ],
+            }
+        """
+        method = "GET"
+        uri = "console/namespaces"
+        success, data = self._request(method, uri, ret_type="json")
+        logger.debug(f"Namespace list result: {success}, data: {data}")
+        return success, data
+
+    def namespace_create(
+        self, namespace_id: str, namespace_name: str, namespace_desc: str = None
+    ):
+        """Create namespace
+
+        Args:
+            namespace_id (str): custom namespace id
+            namespace_name (str): namespace name
+            namespace_desc (str): namespace description
+
+        Returns: success, data: True and create status (bool, success or not) or False and msg
+        """
+        method = "POST"
+        uri = "console/namespaces"
+        params = {
+            "customNamespaceId": namespace_id,
+            "namespaceName": namespace_name,
+            "namespaceDesc": namespace_desc,
+        }
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "true"
+        logger.debug(f"Namespace create result: {success}, data: {data}")
+        return success, data
+
+    def namespace_modify(
+        self, namespace_id: str, namespace_name: str, namespace_desc: str = None
+    ):
+        """Modify namespace
+
+        Args:
+            namespace_id (str): (custom) namespace id
+            namespace_name (str): namespace show name
+            namespace_desc (str): namespace description
+
+        Returns: success, data: True and create status (bool, success or not) or False and msg
+        """
+        method = "PUT"
+        uri = "console/namespaces"
+        params = {
+            "namespace": namespace_id,
+            "namespaceShowName": namespace_name,
+            "namespaceDesc": namespace_desc,
+        }
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "true"
+        logger.debug(f"Namespace create result: {success}, data: {data}")
+        return success, data
+
+    def namespace_delete(self, namespace_id: str):
+        """Delete namespace
+
+        Args:
+            namespace_id (str): namespace id
+
+        Returns: success, data: True and delete status (bool, success or not) or False and msg
+        """
+        method = "DELETE"
+        uri = "console/namespaces"
+        params = {"namespaceId": namespace_id}
+        success, data = self._request(method, uri, ret_type="text", params=params)
+        if success:
+            data = data == "true"
+        logger.debug(f"Namespace delete result: {success}, data: {data}")
         return success, data
