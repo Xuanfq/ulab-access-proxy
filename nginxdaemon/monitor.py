@@ -22,7 +22,7 @@ class MonitorDaemon:
         nginx_context_path: str,
         nginx_status_url: str = "http://127.0.0.1/status",
     ):
-        """_summary_
+        """Monitor daemon for nginx
 
         Args:
             nginx_runner_path (str): nginx runner path (bin file)
