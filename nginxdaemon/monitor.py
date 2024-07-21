@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import argparse
 from nginx import NginxUtils
+import config
 
 
 BASE_PATH = Path(__file__).resolve().parent
@@ -35,8 +36,15 @@ class MonitorDaemon:
         self.check_alive_thread = None
         self.check_command_interval = 1
         self.check_command_thread = None
+        self.nginx_status_url = nginx_status_url
+        self.nginx = None
+        self.config_dict = {}
+        # load config
+        self._load_config()
         # init nginx tool
-        self.nginx = NginxUtils(nginx_runner_path, nginx_context_path, nginx_status_url)
+        self.nginx = NginxUtils(
+            nginx_runner_path, nginx_context_path, self.nginx_status_url
+        )
         # add signal handler
         signal.signal(signal.SIGTERM, self._handle_signal)  # kill
         signal.signal(signal.SIGINT, self._handle_signal)  # ctrl+c
@@ -45,6 +53,17 @@ class MonitorDaemon:
         self.check_command_thread = Thread(target=self.daemon_cmd_monitor)
         self.check_command_thread.start()
         logger.info("Nginx monitor command daemon started...")
+
+    def _load_config(self):
+        success, data = config.nginx_daemon_config_get()
+        if success:
+            self.check_alive_interval = int(data["check_alive_interval"])
+            self.check_command_interval = int(data["check_command_interval"])
+            self.nginx_status_url = data["nginx_status_url"]
+            if self.nginx is not None:
+                self.nginx.nginx_status_url = self.nginx_status_url
+            self.config_dict = data
+        logger.info(f"Load config: {self.config_dict}")
 
     def _handle_signal(self, signum, frame):
         if signum == signal.SIGINT:

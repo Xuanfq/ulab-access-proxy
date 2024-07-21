@@ -1,2 +1,4 @@
 logs/**
 tmp/**
+conf/ulab-access-proxy.service
+conf/ulab-access-proxy-daemon.service

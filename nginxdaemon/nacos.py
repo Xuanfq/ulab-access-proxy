@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 class NacosClient:
-    def __init__(self, ip, port, username, password, https: bool = False):
+    def __init__(
+        self, ip, port, username: str = None, password: str = None, https: bool = False
+    ):
         self.openapi_nacos_version = "2.3.2"
         self.ip = ip
         self.port = port
@@ -58,7 +60,12 @@ class NacosClient:
             data = response.text
         return True, data
 
-    def login(self):
+    def login(self, username: str = None, password: str = None):
+        if username is not None and password is not None:
+            self.username = username
+            self.password = password
+        if self.username is None or self.password is None:
+            return False, "Username and password are required for login"
         self.login_timestamp = 0
         self.access_token = None
         self.access_token_ttl = 0
