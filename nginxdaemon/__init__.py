@@ -1,8 +1,7 @@
 #!/bin/python3
 import logging
 from logging import handlers, config
-import server
-from server import NginxMonitorDaemon, NginxUtils
+from monitor import MonitorDaemon
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,7 @@ LOGGING_CONFIG = {
 
 if __name__ == "__main__":
     logging.config.dictConfig(LOGGING_CONFIG)
-    nmd = NginxMonitorDaemon(
+    nmd = MonitorDaemon(
         nginx_runner_path=f"{PROJ_PATH}/nginx/nginx",
         nginx_context_path=f"{PROJ_PATH}/nginx/",
         nginx_status_url="http://127.0.0.1/status",

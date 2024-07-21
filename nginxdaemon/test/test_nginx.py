@@ -5,7 +5,7 @@ from pathlib import Path
 import os, sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from server import NginxUtils, NginxMonitorDaemon
+from nginx import NginxUtils
 
 
 BASE_PATH = Path(__file__).resolve().parent.parent
@@ -14,7 +14,7 @@ PROJ_PATH = Path(__file__).resolve().parent.parent.parent
 logger = logging.getLogger(__name__)
 
 
-def test_server_nginx_utils():
+def test_nginx_utils():
     nu = NginxUtils(
         nginx_runner_path=f"{PROJ_PATH}/nginx/nginx",
         nginx_context_path=f"{PROJ_PATH}/nginx/",
@@ -38,25 +38,15 @@ def test_server_nginx_utils():
     nu.start()
 
 
-def test_server_nginx_daemon():
-    nmd = NginxMonitorDaemon(
-        nginx_runner_path=f"{PROJ_PATH}/nginx/nginx",
-        nginx_context_path=f"{PROJ_PATH}/nginx/",
-    )
-    nmd.start()
-
-
-def test_server():
+def test():
     logger.info("Tests starting...")
     logger.info("Testing NginxUtils...")
-    test_server_nginx_utils()
-    time.sleep(5)
-    logger.info("Testing NginxDaemon...")
-    test_server_nginx_daemon()
+    test_nginx_utils()
+    logger.info("Tests finished.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO, format="[%(asctime)s - %(levelname)s]: %(message)s"
     )
-    test_server()
+    test()
