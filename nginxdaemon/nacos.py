@@ -22,6 +22,7 @@ class NacosClient:
         self.access_token_ttl = 0  # seconds
         self.global_admin = False
         self.login_timestamp = 0  # seconds
+        self.status_green = False
         self.login()
 
     def _request(self, method, uri, ret_type: str = "json", **kwargs):
@@ -38,13 +39,19 @@ class NacosClient:
         }
         logger.debug(f"Requesting {method} {uri} with params {kwargs}")
         # do request
-        response = requests.request(
-            method=method, url=f"{self.base_url}/{uri}", **kwargs
-        )
+        try:
+            response = requests.request(
+                method=method, url=f"{self.base_url}/{uri}", **kwargs
+            )
+        except Exception as e:
+            logger.error(f"Request failed with error: {e}")
+            self.status_green = False
+            return False, str(e)
         # get request status code
         if response.status_code != 200:
             msg = f"Request failed with status code [{response.status_code}] and response: [{response.text}]"
             logger.error(msg)
+            self.status_green = False
             # check access token timeout
             if self.login_timestamp + self.access_token_ttl <= int(time.time()):
                 logger.warning("Access token expired, retrying login...")
@@ -58,6 +65,7 @@ class NacosClient:
             data = response.json()
         elif ret_type == "text":
             data = response.text
+        self.status_green = True
         return True, data
 
     def login(self, username: str = None, password: str = None):
@@ -89,6 +97,7 @@ class NacosClient:
             self.access_token = data["accessToken"]
             self.access_token_ttl = data["tokenTtl"]
             self.global_admin = data["globalAdmin"]
+            self.status_green = True
         else:
             logger.error(f"Login failed [the {count} time(s)]: {data}")
             self.login_timestamp = login_timestamp
@@ -96,6 +105,9 @@ class NacosClient:
             self.access_token_ttl = 0
             self.global_admin = False
         return success, data
+
+    def alive(self):
+        return self.status_green
 
     def config_get(self, data_id: str, group: str, tenant: str = None):
         """get config from nacos

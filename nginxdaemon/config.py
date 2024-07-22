@@ -76,7 +76,7 @@ def nginx_config_set(cfg: str):
 
 def nginx_config_set_custom(cfg_filename: str, cfg: str):
     try:
-        filepath = (CONFIG_BASE_PATH / cfg_filename).parent
+        filepath = (CONFIG_BASE_PATH / cfg_filename)
         if cfg_filename.count("/") > 0 or not filepath.is_relative_to(CONFIG_BASE_PATH):
             msg = "Invalid path"
             logger.error(msg)
@@ -91,7 +91,7 @@ def nginx_config_set_custom(cfg_filename: str, cfg: str):
 
 
 def nginx_config_get_custom(cfg_filename: str = None):
-    """_summary_
+    """get custom config file
 
     Args:
         cfg_filename (str, optional): config filename. Defaults to None.
@@ -114,7 +114,7 @@ def nginx_config_get_custom(cfg_filename: str = None):
             filepath = CONFIG_BASE_PATH / cfg_file
             if cfg_filename is not None and cfg_filename == cfg_file:
                 if os.path.isfile(filepath):
-                    with open(cfg_file, "r", encoding="utf-8") as f:
+                    with open(filepath, "r", encoding="utf-8") as f:
                         return True, f.read()
                 msg = "Config file not found"
                 logger.error(msg)
