@@ -39,16 +39,16 @@ class MonitorDaemon:
         self.nginx_runner_path = nginx_runner_path  # fixed value from function
         self.nginx_context_path = nginx_context_path  # fixed value from function
         self.nginx_status_url = nginx_status_url
-        self.nginx = None
+        self.nginx: NginxUtils = None
         self.nacos_address = None
         self.nacos_port = None
         self.nacos_username = None
         self.nacos_password = None
-        self.nacos = None
+        self.nacos: NacosClient = None
         self.config_dict = {}
-        self.nginx_status_monitoring_thread = None
-        self.command_input_monitoring_thread = None
-        self.config_status_monitoring_thread = None
+        self.nginx_status_monitoring_thread: Thread = None
+        self.command_input_monitoring_thread: Thread = None
+        self.config_status_monitoring_thread: Thread = None
         # load config
         self._load_config()
         self._load_daemon()
@@ -176,6 +176,9 @@ class MonitorDaemon:
                     conf_version_data_id = self.config_dict[
                         "nacos_conf_version_data_id"
                     ]
+                    auto_reload_nginx = bool(
+                        self.config_dict["nacos_auto_reload_nginx"]
+                    )
                     conf_version_success, local_conf_version = (
                         config.nginx_config_get_custom(conf_version_data_id)
                     )
@@ -261,6 +264,11 @@ class MonitorDaemon:
                                     logger.error(
                                         f"Download config {config_name} to local error"
                                     )
+                            if auto_reload_nginx:
+                                logger.info("Reloading nginx...")
+                                if self.nginx.test_config():
+                                    logger.info("Nginx config test success")
+                                    self.nginx.reload()
                             logger.info("Download config from nacos success")
             except Exception as e:
                 logger.error(f"Sync config from nacos error: {e}")
